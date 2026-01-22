@@ -41,10 +41,14 @@ function Upload() {
       const data = await res.json();
       setResult(data);
       setStatus("");
-    } catch (err) {
+    } catch {
       setStatus("Upload failed");
     }
   };
+
+  const downloadLink =
+    result &&
+    `${window.location.origin}/download/${result.fileId}`;
 
   return (
     <div className="page">
@@ -66,11 +70,11 @@ function Upload() {
         {result && (
           <>
             <p className="success">Upload successful</p>
-            <input value={result.downloadLink} readOnly />
+
+            <input value={downloadLink} readOnly />
+
             <button
-              onClick={() =>
-                navigator.clipboard.writeText(result.downloadLink)
-              }
+              onClick={() => navigator.clipboard.writeText(downloadLink)}
             >
               Copy Link
             </button>

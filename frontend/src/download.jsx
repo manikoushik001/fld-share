@@ -34,15 +34,9 @@ function Download() {
       .catch((e) => setError(e.message));
   }, [filename]);
 
-  const download = async () => {
+  const download = () => {
     setDownloading(true);
-    try {
-      const res = await fetch(`${API_BASE}/download/${filename}`);
-      if (!res.ok) throw new Error(await res.text());
-      window.open(`${API_BASE}/download/${filename}`, "_blank");
-    } catch (e) {
-      alert(e.message);
-    }
+    window.open(`${API_BASE}/download/${filename}`, "_blank");
     setDownloading(false);
   };
 
