@@ -1,19 +1,33 @@
-import { useState } from "react";
-import { API_BASE } from "./config";
+import { useState, useEffect } from "react";
+import { API_BASE, FRONTEND_BASE } from "./config";
 
-export default function Upload() {
+function Upload() {
   const [file, setFile] = useState(null);
   const [status, setStatus] = useState("");
-  const [link, setLink] = useState("");
+  const [downloadLink, setDownloadLink] = useState("");
+
+  useEffect(() => {
+    const saved = localStorage.getItem("theme") || "light";
+    document.documentElement.setAttribute("data-theme", saved);
+  }, []);
+
+  const toggleTheme = () => {
+    const next =
+      document.documentElement.getAttribute("data-theme") === "dark"
+        ? "light"
+        : "dark";
+    document.documentElement.setAttribute("data-theme", next);
+    localStorage.setItem("theme", next);
+  };
 
   const uploadFile = async () => {
     if (!file) {
-      setStatus("Select a file first");
+      setStatus("Please select a file");
       return;
     }
 
     setStatus("Uploading...");
-    setLink("");
+    setDownloadLink("");
 
     const formData = new FormData();
     formData.append("file", file);
@@ -27,7 +41,9 @@ export default function Upload() {
       if (!res.ok) throw new Error("Upload failed");
 
       const data = await res.json();
-      setLink(data.downloadLink);
+
+      const link = `${FRONTEND_BASE}/download/${data.fileId}`;
+      setDownloadLink(link);
       setStatus("Upload successful");
     } catch (err) {
       setStatus("Upload failed");
@@ -36,19 +52,28 @@ export default function Upload() {
 
   return (
     <div className="page">
+      <button className="theme-toggle" onClick={toggleTheme}>
+        {document.documentElement.getAttribute("data-theme") === "dark"
+          ? "Light"
+          : "Dark"}
+      </button>
+
       <div className="card">
         <h2>FLD Share</h2>
-        <p>Fast. Simple. Private.</p>
 
-        <input type="file" onChange={e => setFile(e.target.files[0])} />
+        <input type="file" onChange={(e) => setFile(e.target.files[0])} />
+
         <button onClick={uploadFile}>Upload</button>
 
-        {status && <p>{status}</p>}
+        {status && <p className="warning">{status}</p>}
 
-        {link && (
+        {downloadLink && (
           <>
-            <input value={link} readOnly />
-            <button onClick={() => navigator.clipboard.writeText(link)}>
+            <p className="success">Share this link</p>
+            <input value={downloadLink} readOnly />
+            <button
+              onClick={() => navigator.clipboard.writeText(downloadLink)}
+            >
               Copy Link
             </button>
           </>
@@ -57,3 +82,5 @@ export default function Upload() {
     </div>
   );
 }
+
+export default Upload;

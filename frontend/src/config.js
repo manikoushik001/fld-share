@@ -1,1 +1,2 @@
-export const API_BASE = import.meta.env.VITE_API_BASE;
+export const API_BASE = "https://fldshare-backend.onrender.com";
+export const FRONTEND_BASE = "https://fld-share.vercel.app";
