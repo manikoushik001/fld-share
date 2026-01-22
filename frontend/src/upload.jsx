@@ -1,55 +1,62 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { API_BASE } from "./config";
-import QRCode from "react-qr-code";
 
 export default function Upload() {
   const [file, setFile] = useState(null);
-  const [expiry, setExpiry] = useState(60);
-  const [password, setPassword] = useState("");
-  const [maxDownloads, setMaxDownloads] = useState(1);
-  const [link, setLink] = useState("");
   const [status, setStatus] = useState("");
+  const [link, setLink] = useState("");
+
+  useEffect(() => {
+    document.documentElement.setAttribute(
+      "data-theme",
+      localStorage.getItem("theme") || "light"
+    );
+  }, []);
+
+  const toggleTheme = () => {
+    const t =
+      document.documentElement.getAttribute("data-theme") === "dark"
+        ? "light"
+        : "dark";
+    document.documentElement.setAttribute("data-theme", t);
+    localStorage.setItem("theme", t);
+  };
 
   const upload = async () => {
-    if (!file) return setStatus("Select a file");
-
-    const form = new FormData();
-    form.append("file", file);
-    form.append("expiryMinutes", expiry);
-    form.append("password", password);
-    form.append("maxDownloads", maxDownloads);
+    if (!file) return setStatus("Select a file first");
 
     setStatus("Uploading...");
+    const fd = new FormData();
+    fd.append("file", file);
 
     const res = await fetch(`${API_BASE}/upload`, {
       method: "POST",
-      body: form
+      body: fd
     });
 
     const data = await res.json();
     setLink(data.downloadLink);
-    setStatus("Done");
+    setStatus("");
   };
 
   return (
-    <div className="card">
-      <h2>FLD Share</h2>
+    <div className="page">
+      <button className="theme-toggle" onClick={toggleTheme}>Theme</button>
+      <div className="card">
+        <h2>FLD Share</h2>
+        <input type="file" onChange={e => setFile(e.target.files[0])} />
+        <button onClick={upload}>Upload</button>
 
-      <input type="file" onChange={e => setFile(e.target.files[0])} />
-      <input type="number" value={expiry} onChange={e => setExpiry(e.target.value)} placeholder="Expiry (min)" />
-      <input type="password" placeholder="Password (optional)" onChange={e => setPassword(e.target.value)} />
-      <input type="number" value={maxDownloads} onChange={e => setMaxDownloads(e.target.value)} placeholder="Max downloads" />
-
-      <button onClick={upload}>Upload</button>
-
-      <p>{status}</p>
-
-      {link && (
-        <>
-          <input value={link} readOnly />
-          <QRCode value={link} />
-        </>
-      )}
+        {status && <p className="warning">{status}</p>}
+        {link && (
+          <>
+            <input value={link} readOnly />
+            <button onClick={() => navigator.clipboard.writeText(link)}>
+              Copy Link
+            </button>
+          </>
+        )}
+      </div>
     </div>
   );
 }

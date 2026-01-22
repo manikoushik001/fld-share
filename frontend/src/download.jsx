@@ -4,28 +4,30 @@ import { API_BASE } from "./config";
 
 export default function Download() {
   const { id } = useParams();
-  const [info, setInfo] = useState(null);
+  const [file, setFile] = useState(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
     fetch(`${API_BASE}/meta/${id}`)
-      .then(res => res.json())
-      .then(setInfo)
-      .catch(() => setError("Invalid link"));
+      .then(r => r.json())
+      .then(setFile)
+      .catch(() => setError("File not found"));
   }, [id]);
 
+  const download = () => {
+    window.open(`${API_BASE}/download/${id}`, "_blank");
+  };
+
   if (error) return <p>{error}</p>;
-  if (!info) return <p>Loading...</p>;
+  if (!file) return <p>Loading...</p>;
 
   return (
-    <div className="card">
-      <h2>{info.originalName}</h2>
-      <p>{(info.size / 1024).toFixed(1)} KB</p>
-      <p>Downloads left: {info.downloadsLeft}</p>
-
-      <button onClick={() => window.location.href = `${API_BASE}/download/${id}`}>
-        Download
-      </button>
+    <div className="page">
+      <div className="card">
+        <h2>{file.originalName}</h2>
+        <p>{(file.size / 1024).toFixed(2)} KB</p>
+        <button onClick={download}>Download</button>
+      </div>
     </div>
   );
 }
