@@ -12,7 +12,7 @@ export default function Download() {
     fetch(`${API_BASE}/meta/${filename}`)
       .then((r) => r.json())
       .then(setMeta)
-      .catch(() => setError("File not found"));
+      .catch(() => setError("Invalid link"));
   }, [filename]);
 
   const download = async () => {
@@ -28,8 +28,11 @@ export default function Download() {
     }
 
     const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    window.open(url);
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = meta.originalName;
+    a.click();
   };
 
   if (!meta) return <p>Loading...</p>;
@@ -38,7 +41,7 @@ export default function Download() {
     <div className="page">
       <div className="card">
         <h2>{meta.originalName}</h2>
-        <p>Remaining downloads: {meta.remaining}</p>
+        <p>Remaining: {meta.remaining}</p>
 
         {meta.passwordRequired && (
           <input
@@ -49,7 +52,6 @@ export default function Download() {
         )}
 
         <button onClick={download}>Download</button>
-
         {error && <p>{error}</p>}
       </div>
     </div>

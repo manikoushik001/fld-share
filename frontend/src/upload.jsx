@@ -5,34 +5,29 @@ import { API_BASE } from "./config";
 export default function Upload() {
   const [file, setFile] = useState(null);
   const [password, setPassword] = useState("");
-  const [maxDownloads, setMaxDownloads] = useState("");
-  const [status, setStatus] = useState("");
+  const [maxDownloads, setMaxDownloads] = useState("1");
+  const [deleteAfter, setDeleteAfter] = useState("60");
   const [result, setResult] = useState(null);
+  const [status, setStatus] = useState("");
 
   const uploadFile = async () => {
     if (!file) return setStatus("Select a file");
 
     setStatus("Uploading...");
-    setResult(null);
-
     const form = new FormData();
     form.append("file", file);
     if (password) form.append("password", password);
-    if (maxDownloads) form.append("maxDownloads", maxDownloads);
+    form.append("maxDownloads", maxDownloads);
+    form.append("deleteAfterMinutes", deleteAfter);
 
-    try {
-      const res = await fetch(`${API_BASE}/upload`, {
-        method: "POST",
-        body: form,
-      });
-      if (!res.ok) throw new Error();
+    const res = await fetch(`${API_BASE}/upload`, {
+      method: "POST",
+      body: form,
+    });
 
-      const data = await res.json();
-      setResult(data);
-      setStatus("");
-    } catch {
-      setStatus("Upload failed");
-    }
+    const data = await res.json();
+    setResult(data);
+    setStatus("");
   };
 
   return (
@@ -50,9 +45,17 @@ export default function Upload() {
 
         <input
           type="number"
-          placeholder="Max downloads (optional)"
+          min="1"
+          max="100"
           value={maxDownloads}
           onChange={(e) => setMaxDownloads(e.target.value)}
+        />
+
+        <input
+          type="number"
+          placeholder="Delete after (minutes)"
+          value={deleteAfter}
+          onChange={(e) => setDeleteAfter(e.target.value)}
         />
 
         <button onClick={uploadFile}>Upload</button>
@@ -62,14 +65,6 @@ export default function Upload() {
         {result && (
           <>
             <input value={result.downloadLink} readOnly />
-            <button
-              onClick={() =>
-                navigator.clipboard.writeText(result.downloadLink)
-              }
-            >
-              Copy Link
-            </button>
-
             <QRCodeCanvas value={result.downloadLink} size={180} />
           </>
         )}
