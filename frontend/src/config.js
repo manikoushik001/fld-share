@@ -1,3 +1,1 @@
-// src/config.js
-export const API_BASE = "https://fld-share-backend.onrender.com";
-    
+export const API_BASE = "https://fldshare-backend.onrender.com";

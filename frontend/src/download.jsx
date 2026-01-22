@@ -1,89 +1,41 @@
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { API_BASE } from "./config";
 
-function Download() {
-  const { filename } = useParams();
-  const navigate = useNavigate();
-
-  const [fileInfo, setFileInfo] = useState(null);
-  const [error, setError] = useState("");
-  const [downloading, setDownloading] = useState(false);
+export default function Download() {
+  const { id } = useParams();
+  const [info, setInfo] = useState(null);
+  const [password, setPassword] = useState("");
 
   useEffect(() => {
-    const saved = localStorage.getItem("theme") || "light";
-    document.documentElement.setAttribute("data-theme", saved);
-  }, []);
-
-  const toggleTheme = () => {
-    const next =
-      document.documentElement.getAttribute("data-theme") === "dark"
-        ? "light"
-        : "dark";
-    document.documentElement.setAttribute("data-theme", next);
-    localStorage.setItem("theme", next);
-  };
-
-  useEffect(() => {
-    fetch(`${API_BASE}/meta/${filename}`)
-      .then((res) => {
-        if (!res.ok) throw new Error("File not found");
-        return res.json();
-      })
-      .then(setFileInfo)
-      .catch((e) => setError(e.message));
-  }, [filename]);
+    fetch(`${API_BASE}/meta/${id}`)
+      .then(r => r.json())
+      .then(setInfo);
+  }, [id]);
 
   const download = () => {
-    setDownloading(true);
-    window.open(`${API_BASE}/download/${filename}`, "_blank");
-    setDownloading(false);
+    window.open(
+      `${API_BASE}/download/${id}?password=${encodeURIComponent(password)}`,
+      "_blank"
+    );
   };
 
-  if (error)
-    return (
-      <div className="page">
-        <div className="card">
-          <p className="error">{error}</p>
-          <button onClick={() => navigate("/")}>Go Home</button>
-        </div>
-      </div>
-    );
-
-  if (!fileInfo)
-    return (
-      <div className="page">
-        <div className="card">
-          <p>Loading...</p>
-        </div>
-      </div>
-    );
+  if (!info) return <p>Loading...</p>;
 
   return (
     <div className="page">
-      <button className="theme-toggle" onClick={toggleTheme}>
-        {document.documentElement.getAttribute("data-theme") === "dark"
-          ? "Light"
-          : "Dark"}
-      </button>
-
       <div className="card">
-        <h2>Download File</h2>
+        <h2>{info.originalName}</h2>
+        <p>Remaining downloads: {info.remaining}</p>
 
-        <p>
-          <strong>Name:</strong> {fileInfo.originalName}
-        </p>
-        <p>
-          <strong>Size:</strong>{" "}
-          {(fileInfo.size / 1024).toFixed(2)} KB
-        </p>
+        <input
+          placeholder="Password (if required)"
+          value={password}
+          onChange={e => setPassword(e.target.value)}
+        />
 
-        <button onClick={download} disabled={downloading}>
-          {downloading ? "Downloading..." : "Download"}
-        </button>
+        <button onClick={download}>Download</button>
       </div>
     </div>
   );
 }
-
-export default Download;
