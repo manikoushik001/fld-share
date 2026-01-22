@@ -6,27 +6,33 @@ const path = require("path");
 const crypto = require("crypto");
 
 const app = express();
+
 app.use(cors());
 app.use(express.json());
 
-const UPLOAD_DIR = "uploads";
-if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR);
+const UPLOAD_DIR = path.join(__dirname, "uploads");
+if (!fs.existsSync(UPLOAD_DIR)) {
+  fs.mkdirSync(UPLOAD_DIR);
+}
 
-// in-memory DB (replace later with MongoDB)
-const files = {};
-
+/* ================= STORAGE ================= */
 const storage = multer.diskStorage({
-  destination: UPLOAD_DIR,
-  filename: (req, file, cb) => {
-    const id = crypto.randomBytes(16).toString("hex");
-    cb(null, id);
+  destination: (_, __, cb) => cb(null, UPLOAD_DIR),
+  filename: (_, __, cb) => {
+    cb(null, crypto.randomBytes(16).toString("hex"));
   }
 });
-
 const upload = multer({ storage });
 
-/* UPLOAD */
+/* ================= IN-MEMORY DB ================= */
+const files = {};
+
+/* ================= UPLOAD ================= */
 app.post("/upload", upload.single("file"), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: "No file uploaded" });
+  }
+
   const {
     expiryMinutes = 60,
     password = "",
@@ -43,21 +49,21 @@ app.post("/upload", upload.single("file"), (req, res) => {
     password,
     maxDownloads: Number(maxDownloads),
     downloads: 0,
-    expiresAt: Date.now() + expiryMinutes * 60 * 1000
+    expiresAt: Date.now() + Number(expiryMinutes) * 60 * 1000
   };
 
   res.json({
-    downloadLink: `https://fldshare.vercel.app/download/${id}`
+    downloadLink: `https://fld-share.vercel.app/download/${id}`
   });
 });
 
-/* META */
+/* ================= META ================= */
 app.get("/meta/:id", (req, res) => {
   const file = files[req.params.id];
-  if (!file) return res.status(404).json({ error: "Not found" });
+  if (!file) return res.status(404).json({ error: "File not found" });
 
   if (Date.now() > file.expiresAt)
-    return res.status(410).json({ error: "Expired" });
+    return res.status(410).json({ error: "Link expired" });
 
   res.json({
     originalName: file.originalName,
@@ -66,22 +72,24 @@ app.get("/meta/:id", (req, res) => {
   });
 });
 
-/* DOWNLOAD */
+/* ================= DOWNLOAD ================= */
 app.get("/download/:id", (req, res) => {
   const file = files[req.params.id];
-  if (!file) return res.status(404).send("Not found");
+  if (!file) return res.status(404).send("File not found");
 
   if (Date.now() > file.expiresAt)
-    return res.status(410).send("Expired");
+    return res.status(410).send("Link expired");
 
   if (file.downloads >= file.maxDownloads)
     return res.status(410).send("Download limit reached");
 
-  file.downloads++;
+  file.downloads += 1;
 
   res.download(file.path, file.originalName);
 });
 
-app.listen(5000, () => {
-  console.log("Backend running on port 5000");
+/* ================= SERVER ================= */
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () => {
+  console.log("FLD Share backend running");
 });
