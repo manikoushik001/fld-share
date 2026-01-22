@@ -1,66 +1,87 @@
 const express = require("express");
 const multer = require("multer");
-const path = require("path");
-const fs = require("fs");
 const cors = require("cors");
+const fs = require("fs");
+const path = require("path");
 const crypto = require("crypto");
 
 const app = express();
 app.use(cors());
+app.use(express.json());
 
-/* ---------- STORAGE ---------- */
-const upload = multer({
-  dest: "uploads/",
-  limits: { fileSize: 50 * 1024 * 1024 } // 50MB
-});
+const UPLOAD_DIR = "uploads";
+if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR);
 
-/* ---------- TEST ---------- */
-app.get("/", (req, res) => {
-  res.send("FLD Share backend running");
-});
+// in-memory DB (replace later with MongoDB)
+const files = {};
 
-/* ---------- UPLOAD ---------- */
-app.post("/upload", upload.single("file"), (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ error: "No file uploaded" });
+const storage = multer.diskStorage({
+  destination: UPLOAD_DIR,
+  filename: (req, file, cb) => {
+    const id = crypto.randomBytes(16).toString("hex");
+    cb(null, id);
   }
+});
 
-  const fileId = crypto.randomBytes(16).toString("hex");
+const upload = multer({ storage });
 
-  const newPath = path.join("uploads", fileId);
-  fs.renameSync(req.file.path, newPath);
+/* UPLOAD */
+app.post("/upload", upload.single("file"), (req, res) => {
+  const {
+    expiryMinutes = 60,
+    password = "",
+    maxDownloads = 1
+  } = req.body;
+
+  const id = req.file.filename;
+
+  files[id] = {
+    id,
+    path: req.file.path,
+    originalName: req.file.originalname,
+    size: req.file.size,
+    password,
+    maxDownloads: Number(maxDownloads),
+    downloads: 0,
+    expiresAt: Date.now() + expiryMinutes * 60 * 1000
+  };
 
   res.json({
-    message: "Upload successful",
-    originalName: req.file.originalname,
-    fileId
+    downloadLink: `https://fldshare.vercel.app/download/${id}`
   });
 });
 
-/* ---------- META ---------- */
+/* META */
 app.get("/meta/:id", (req, res) => {
-  const filePath = path.join("uploads", req.params.id);
-  if (!fs.existsSync(filePath)) {
-    return res.status(404).json({ error: "File not found" });
-  }
+  const file = files[req.params.id];
+  if (!file) return res.status(404).json({ error: "Not found" });
 
-  res.json({ exists: true });
+  if (Date.now() > file.expiresAt)
+    return res.status(410).json({ error: "Expired" });
+
+  res.json({
+    originalName: file.originalName,
+    size: file.size,
+    downloadsLeft: file.maxDownloads - file.downloads
+  });
 });
 
-/* ---------- DOWNLOAD ---------- */
+/* DOWNLOAD */
 app.get("/download/:id", (req, res) => {
-  const filePath = path.join("uploads", req.params.id);
+  const file = files[req.params.id];
+  if (!file) return res.status(404).send("Not found");
 
-  if (!fs.existsSync(filePath)) {
-    return res.status(404).send("File not found");
-  }
+  if (Date.now() > file.expiresAt)
+    return res.status(410).send("Expired");
 
-  // IMPORTANT: force browser to download
-  res.download(filePath);
+  if (file.downloads >= file.maxDownloads)
+    return res.status(410).send("Download limit reached");
+
+  file.downloads++;
+
+  res.download(file.path, file.originalName);
 });
 
-/* ---------- SERVER ---------- */
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`Backend running on port ${PORT}`);
+app.listen(5000, () => {
+  console.log("Backend running on port 5000");
 });
