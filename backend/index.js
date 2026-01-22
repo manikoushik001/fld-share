@@ -1,118 +1,114 @@
 const express = require("express");
-const cors = require("cors");
 const multer = require("multer");
-const crypto = require("crypto");
+const cors = require("cors");
+const bcrypt = require("bcrypt");
 const fs = require("fs");
 const path = require("path");
+const { v4: uuid } = require("uuid");
 
 const app = express();
-app.use(cors());
-app.use(express.json());
-
 const PORT = process.env.PORT || 5000;
-const BASE_URL = "https://fld-share.vercel.app";
+
+app.use(cors({
+  origin: "https://fld-share.vercel.app"
+}));
+
+app.use(express.json());
 
 const UPLOAD_DIR = path.join(__dirname, "uploads");
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR);
 
-const files = new Map(); // temporary storage
-
-/* ---------- UTILS ---------- */
-const hash = (v) =>
-  crypto.createHash("sha256").update(v).digest("hex");
-
-/* ---------- MULTER ---------- */
 const storage = multer.diskStorage({
   destination: UPLOAD_DIR,
-  filename: (_, file, cb) => {
-    const id = crypto.randomBytes(16).toString("hex");
-    cb(null, id);
-  },
+  filename: (req, file, cb) => {
+    const id = uuid();
+    const ext = path.extname(file.originalname);
+    cb(null, `${id}${ext}`);
+  }
 });
+
 const upload = multer({ storage });
 
-/* ---------- CLEANUP ---------- */
-setInterval(() => {
-  const now = Date.now();
-  for (const [id, file] of files) {
-    if (file.expiresAt && now > file.expiresAt) {
-      fs.unlink(file.path, () => {});
-      files.delete(id);
-    }
-  }
-}, 60 * 1000);
+/* in-memory DB (simple + reliable for now) */
+const files = {};
 
-/* ---------- UPLOAD ---------- */
-app.post("/upload", upload.single("file"), (req, res) => {
-  const { password, maxDownloads, deleteAfterMinutes } = req.body;
+/* UPLOAD */
+app.post("/upload", upload.single("file"), async (req, res) => {
+  const {
+    password,
+    maxDownloads = 1,
+    expiresInMinutes = 60
+  } = req.body;
 
-  const id = req.file.filename;
+  const id = path.parse(req.file.filename).name;
 
-  files.set(id, {
-    originalName: req.file.originalname,
+  const hashedPassword = password
+    ? await bcrypt.hash(password, 10)
+    : null;
+
+  files[id] = {
     path: req.file.path,
-    size: req.file.size,
-    passwordHash: password ? hash(password) : null,
-    maxDownloads: maxDownloads ? Number(maxDownloads) : null,
+    originalName: req.file.originalname,
+    password: hashedPassword,
+    maxDownloads: Number(maxDownloads),
     downloads: 0,
-    expiresAt: deleteAfterMinutes
-      ? Date.now() + Number(deleteAfterMinutes) * 60 * 1000
-      : null,
-  });
+    expiresAt: Date.now() + Number(expiresInMinutes) * 60 * 1000
+  };
 
   res.json({
-    downloadLink: `${BASE_URL}/download/${id}`,
-    passwordRequired: !!password,
+    downloadLink: `https://fld-share.vercel.app/download/${id}`
   });
 });
 
-/* ---------- META ---------- */
+/* METADATA */
 app.get("/meta/:id", (req, res) => {
-  const file = files.get(req.params.id);
+  const file = files[req.params.id];
   if (!file) return res.status(404).json({ error: "Not found" });
 
+  if (Date.now() > file.expiresAt) {
+    cleanup(req.params.id);
+    return res.status(410).json({ error: "Expired" });
+  }
+
   res.json({
-    originalName: file.originalName,
-    size: file.size,
-    passwordRequired: !!file.passwordHash,
-    remaining:
-      file.maxDownloads === null
-        ? "∞"
-        : Math.max(file.maxDownloads - file.downloads, 0),
-    expiresAt: file.expiresAt,
+    name: file.originalName,
+    remaining: file.maxDownloads - file.downloads
   });
 });
 
-/* ---------- DOWNLOAD ---------- */
-app.post("/download/:id", (req, res) => {
-  const file = files.get(req.params.id);
-  if (!file) return res.status(404).send("Link expired or invalid");
+/* DOWNLOAD */
+app.post("/download/:id", async (req, res) => {
+  const file = files[req.params.id];
+  if (!file) return res.status(404).send("Not found");
 
-  if (file.expiresAt && Date.now() > file.expiresAt) {
-    files.delete(req.params.id);
-    return res.status(410).send("Link expired");
+  if (Date.now() > file.expiresAt) {
+    cleanup(req.params.id);
+    return res.status(410).send("Expired");
   }
 
-  if (
-    file.maxDownloads !== null &&
-    file.downloads >= file.maxDownloads
-  ) {
-    return res.status(403).send("Download limit reached");
+  if (file.downloads >= file.maxDownloads) {
+    cleanup(req.params.id);
+    return res.status(410).send("Download limit reached");
   }
 
-  if (file.passwordHash) {
-    if (!req.body.password)
-      return res.status(401).send("Password required");
-
-    if (hash(req.body.password) !== file.passwordHash)
-      return res.status(403).send("Wrong password");
+  if (file.password) {
+    const ok = await bcrypt.compare(req.body.password || "", file.password);
+    if (!ok) return res.status(401).send("Wrong password");
   }
 
   file.downloads++;
 
-  res.download(file.path, file.originalName);
+  res.download(file.path, file.originalName, () => {
+    if (file.downloads >= file.maxDownloads) cleanup(req.params.id);
+  });
 });
 
+function cleanup(id) {
+  if (!files[id]) return;
+  fs.unlink(files[id].path, () => {});
+  delete files[id];
+}
+
 app.listen(PORT, () =>
-  console.log("Backend running on", PORT)
+  console.log(`Backend running on ${PORT}`)
 );
