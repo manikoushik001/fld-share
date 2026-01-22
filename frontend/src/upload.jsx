@@ -1,70 +1,77 @@
 import { useState } from "react";
-import QRCode from "qrcode.react";
+import { QRCodeCanvas } from "qrcode.react";
 import { API_BASE } from "./config";
 
 export default function Upload() {
   const [file, setFile] = useState(null);
-  const [password, setPassword] = useState("");
-  const [expires, setExpires] = useState(60);
-  const [limit, setLimit] = useState(1);
+  const [status, setStatus] = useState("");
   const [result, setResult] = useState(null);
 
-  const upload = async () => {
-    if (!file) return alert("Select a file");
+  const uploadFile = async () => {
+    if (!file) {
+      setStatus("Please select a file");
+      return;
+    }
 
-    const fd = new FormData();
-    fd.append("file", file);
-    fd.append("password", password);
-    fd.append("expiresInMinutes", expires);
-    fd.append("maxDownloads", limit);
+    setStatus("Uploading...");
+    setResult(null);
 
-    const res = await fetch(`${API_BASE}/upload`, {
-      method: "POST",
-      body: fd
-    });
+    const formData = new FormData();
+    formData.append("file", file);
 
-    const data = await res.json();
-    setResult(data);
+    try {
+      const res = await fetch(`${API_BASE}/upload`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) throw new Error("Upload failed");
+
+      const data = await res.json();
+      setResult(data);
+      setStatus("");
+    } catch (err) {
+      setStatus("Upload failed");
+    }
   };
 
   return (
-    <div className="card">
-      <h2>FLD Share</h2>
+    <div className="page">
+      <div className="card">
+        <h2>FLD Share</h2>
 
-      <input type="file" onChange={e => setFile(e.target.files[0])} />
+        <input
+          type="file"
+          onChange={(e) => setFile(e.target.files[0])}
+        />
 
-      <input
-        placeholder="Password (optional)"
-        value={password}
-        onChange={e => setPassword(e.target.value)}
-      />
+        <button onClick={uploadFile}>Upload</button>
 
-      <input
-        type="number"
-        placeholder="Expires (minutes)"
-        value={expires}
-        onChange={e => setExpires(e.target.value)}
-      />
+        {status && <p className="warning">{status}</p>}
 
-      <input
-        type="number"
-        placeholder="Max downloads"
-        value={limit}
-        onChange={e => setLimit(e.target.value)}
-      />
+        {result && (
+          <>
+            <p className="success">Upload successful</p>
 
-      <button onClick={upload}>Upload</button>
+            <input value={result.downloadLink} readOnly />
 
-      {result && (
-        <>
-          <input value={result.downloadLink} readOnly />
-          <button onClick={() => navigator.clipboard.writeText(result.downloadLink)}>
-            Copy Link
-          </button>
+            <button
+              onClick={() =>
+                navigator.clipboard.writeText(result.downloadLink)
+              }
+            >
+              Copy Link
+            </button>
 
-          <QRCode value={result.downloadLink} size={180} />
-        </>
-      )}
+            <div style={{ marginTop: "20px" }}>
+              <QRCodeCanvas
+                value={result.downloadLink}
+                size={180}
+              />
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
