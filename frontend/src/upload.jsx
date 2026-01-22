@@ -1,72 +1,97 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { API_BASE } from "./config";
-import QRCode from "react-qr-code";
 
 export default function Upload() {
   const [file, setFile] = useState(null);
-  const [expiry, setExpiry] = useState(10);
-  const [password, setPassword] = useState("");
-  const [maxDownloads, setMaxDownloads] = useState(1);
-  const [loading, setLoading] = useState(false);
-  const [link, setLink] = useState("");
+  const [status, setStatus] = useState("");
+  const [result, setResult] = useState(null);
 
-  const upload = async () => {
-    if (!file) return alert("Select a file");
+  useEffect(() => {
+    const theme = localStorage.getItem("theme") || "light";
+    document.documentElement.setAttribute("data-theme", theme);
+  }, []);
 
-    setLoading(true);
+  const toggleTheme = () => {
+    const next =
+      document.documentElement.getAttribute("data-theme") === "dark"
+        ? "light"
+        : "dark";
+    document.documentElement.setAttribute("data-theme", next);
+    localStorage.setItem("theme", next);
+  };
 
-    const fd = new FormData();
-    fd.append("file", file);
-    fd.append("expiryMinutes", expiry);
-    fd.append("password", password);
-    fd.append("maxDownloads", maxDownloads);
+  const uploadFile = async () => {
+    console.log("UPLOAD CLICKED"); // ← must print
 
-    const res = await fetch(`${API_BASE}/upload`, {
-      method: "POST",
-      body: fd
-    });
+    if (!file) {
+      setStatus("Please select a file first");
+      return;
+    }
 
-    const data = await res.json();
-    setLoading(false);
-    setLink(data.downloadLink);
+    setStatus("Uploading...");
+    setResult(null);
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const res = await fetch(`${API_BASE}/upload`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) {
+        throw new Error("Upload failed");
+      }
+
+      const data = await res.json();
+      setResult(data);
+      setStatus("Upload successful");
+    } catch (err) {
+      console.error(err);
+      setStatus("Upload failed");
+    }
   };
 
   return (
     <div className="page">
+      <button className="theme-toggle" onClick={toggleTheme}>
+        {document.documentElement.getAttribute("data-theme") === "dark"
+          ? "Light"
+          : "Dark"}
+      </button>
+
       <div className="card">
         <h2>FLD Share</h2>
-
-        <input type="file" onChange={e => setFile(e.target.files[0])} />
-
-        <input
-          type="number"
-          placeholder="Expiry (minutes)"
-          value={expiry}
-          onChange={e => setExpiry(e.target.value)}
-        />
+        <p>Fast. Simple. Private.</p>
 
         <input
-          type="text"
-          placeholder="Password (optional)"
-          value={password}
-          onChange={e => setPassword(e.target.value)}
+          type="file"
+          onChange={(e) => setFile(e.target.files[0])}
         />
 
-        <input
-          type="number"
-          placeholder="Max downloads"
-          value={maxDownloads}
-          onChange={e => setMaxDownloads(e.target.value)}
-        />
-
-        <button onClick={upload}>
-          {loading ? "Uploading..." : "Upload"}
+        <button
+          type="button"
+          onClick={uploadFile}
+          style={{ cursor: "pointer" }}
+        >
+          Upload
         </button>
 
-        {link && (
+        {status && <p className="warning">{status}</p>}
+
+        {result && (
           <>
-            <input value={link} readOnly />
-            <QRCode value={link} />
+            <p className="success">File uploaded</p>
+            <input value={result.downloadLink} readOnly />
+            <button
+              type="button"
+              onClick={() =>
+                navigator.clipboard.writeText(result.downloadLink)
+              }
+            >
+              Copy Link
+            </button>
           </>
         )}
       </div>
