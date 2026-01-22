@@ -1,95 +1,101 @@
 const express = require("express");
 const multer = require("multer");
 const cors = require("cors");
+const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
-const crypto = require("crypto");
 
 const app = express();
-
 app.use(cors());
 app.use(express.json());
 
 const UPLOAD_DIR = path.join(__dirname, "uploads");
-if (!fs.existsSync(UPLOAD_DIR)) {
-  fs.mkdirSync(UPLOAD_DIR);
-}
+if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR);
 
-/* ================= STORAGE ================= */
+// In-memory metadata store (simple + works on Render)
+const files = new Map();
+
+// Multer storage
 const storage = multer.diskStorage({
-  destination: (_, __, cb) => cb(null, UPLOAD_DIR),
-  filename: (_, __, cb) => {
-    cb(null, crypto.randomBytes(16).toString("hex"));
+  destination: UPLOAD_DIR,
+  filename: (req, file, cb) => {
+    const id = crypto.randomBytes(16).toString("hex");
+    cb(null, id);
   }
 });
+
 const upload = multer({ storage });
 
-/* ================= IN-MEMORY DB ================= */
-const files = {};
+// Health check
+app.get("/", (req, res) => {
+  res.send("FLD Share backend running 🚀");
+});
 
-/* ================= UPLOAD ================= */
+// Upload
 app.post("/upload", upload.single("file"), (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ error: "No file uploaded" });
-  }
+  if (!req.file) return res.status(400).send("No file");
 
   const {
-    expiryMinutes = 60,
     password = "",
+    expiresInMinutes = 0,
     maxDownloads = 1
   } = req.body;
 
-  const id = req.file.filename;
+  const fileId = req.file.filename;
 
-  files[id] = {
-    id,
+  files.set(fileId, {
     path: req.file.path,
     originalName: req.file.originalname,
     size: req.file.size,
     password,
     maxDownloads: Number(maxDownloads),
     downloads: 0,
-    expiresAt: Date.now() + Number(expiryMinutes) * 60 * 1000
-  };
+    expiresAt:
+      expiresInMinutes > 0
+        ? Date.now() + expiresInMinutes * 60 * 1000
+        : null
+  });
 
   res.json({
-    downloadLink: `https://fld-share.vercel.app/download/${id}`
+    fileId,
+    downloadLink: `https://fld-share.vercel.app/download/${fileId}`
   });
 });
 
-/* ================= META ================= */
+// Metadata
 app.get("/meta/:id", (req, res) => {
-  const file = files[req.params.id];
-  if (!file) return res.status(404).json({ error: "File not found" });
-
-  if (Date.now() > file.expiresAt)
-    return res.status(410).json({ error: "Link expired" });
+  const file = files.get(req.params.id);
+  if (!file) return res.status(404).send("Not found");
 
   res.json({
     originalName: file.originalName,
     size: file.size,
-    downloadsLeft: file.maxDownloads - file.downloads
+    expiresAt: file.expiresAt,
+    remainingDownloads: file.maxDownloads - file.downloads,
+    passwordProtected: !!file.password
   });
 });
 
-/* ================= DOWNLOAD ================= */
+// Download
 app.get("/download/:id", (req, res) => {
-  const file = files[req.params.id];
-  if (!file) return res.status(404).send("File not found");
+  const file = files.get(req.params.id);
+  if (!file) return res.status(404).send("Not found");
 
-  if (Date.now() > file.expiresAt)
-    return res.status(410).send("Link expired");
+  if (file.expiresAt && Date.now() > file.expiresAt)
+    return res.status(403).send("Expired");
 
   if (file.downloads >= file.maxDownloads)
-    return res.status(410).send("Download limit reached");
+    return res.status(403).send("Download limit reached");
 
-  file.downloads += 1;
+  if (file.password && req.query.password !== file.password)
+    return res.status(401).send("Wrong password");
+
+  file.downloads++;
 
   res.download(file.path, file.originalName);
 });
 
-/* ================= SERVER ================= */
-const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => {
-  console.log("FLD Share backend running");
-});
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () =>
+  console.log(`Backend running on port ${PORT}`)
+);
