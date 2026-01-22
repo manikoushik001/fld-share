@@ -4,33 +4,33 @@ import { API_BASE } from "./config";
 
 export default function Upload() {
   const [file, setFile] = useState(null);
+  const [password, setPassword] = useState("");
+  const [maxDownloads, setMaxDownloads] = useState("");
   const [status, setStatus] = useState("");
   const [result, setResult] = useState(null);
 
   const uploadFile = async () => {
-    if (!file) {
-      setStatus("Please select a file");
-      return;
-    }
+    if (!file) return setStatus("Select a file");
 
     setStatus("Uploading...");
     setResult(null);
 
-    const formData = new FormData();
-    formData.append("file", file);
+    const form = new FormData();
+    form.append("file", file);
+    if (password) form.append("password", password);
+    if (maxDownloads) form.append("maxDownloads", maxDownloads);
 
     try {
       const res = await fetch(`${API_BASE}/upload`, {
         method: "POST",
-        body: formData,
+        body: form,
       });
-
-      if (!res.ok) throw new Error("Upload failed");
+      if (!res.ok) throw new Error();
 
       const data = await res.json();
       setResult(data);
       setStatus("");
-    } catch (err) {
+    } catch {
       setStatus("Upload failed");
     }
   };
@@ -40,21 +40,28 @@ export default function Upload() {
       <div className="card">
         <h2>FLD Share</h2>
 
+        <input type="file" onChange={(e) => setFile(e.target.files[0])} />
+
         <input
-          type="file"
-          onChange={(e) => setFile(e.target.files[0])}
+          placeholder="Password (optional)"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
+
+        <input
+          type="number"
+          placeholder="Max downloads (optional)"
+          value={maxDownloads}
+          onChange={(e) => setMaxDownloads(e.target.value)}
         />
 
         <button onClick={uploadFile}>Upload</button>
 
-        {status && <p className="warning">{status}</p>}
+        {status && <p>{status}</p>}
 
         {result && (
           <>
-            <p className="success">Upload successful</p>
-
             <input value={result.downloadLink} readOnly />
-
             <button
               onClick={() =>
                 navigator.clipboard.writeText(result.downloadLink)
@@ -63,12 +70,7 @@ export default function Upload() {
               Copy Link
             </button>
 
-            <div style={{ marginTop: "20px" }}>
-              <QRCodeCanvas
-                value={result.downloadLink}
-                size={180}
-              />
-            </div>
+            <QRCodeCanvas value={result.downloadLink} size={180} />
           </>
         )}
       </div>

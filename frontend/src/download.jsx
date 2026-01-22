@@ -3,41 +3,55 @@ import { useEffect, useState } from "react";
 import { API_BASE } from "./config";
 
 export default function Download() {
-  const { id } = useParams();
-  const [info, setInfo] = useState(null);
+  const { filename } = useParams();
+  const [meta, setMeta] = useState(null);
   const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    fetch(`${API_BASE}/meta/${id}`)
-      .then(r => r.json())
-      .then(setInfo);
-  }, [id]);
+    fetch(`${API_BASE}/meta/${filename}`)
+      .then((r) => r.json())
+      .then(setMeta)
+      .catch(() => setError("File not found"));
+  }, [filename]);
 
-  const download = () => {
-    const url = password
-      ? `${API_BASE}/download/${id}?password=${password}`
-      : `${API_BASE}/download/${id}`;
+  const download = async () => {
+    const res = await fetch(`${API_BASE}/download/${filename}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password }),
+    });
 
-    window.location.href = url;
+    if (!res.ok) {
+      setError(await res.text());
+      return;
+    }
+
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    window.open(url);
   };
 
-  if (!info) return <p>Loading...</p>;
+  if (!meta) return <p>Loading...</p>;
 
   return (
-    <div className="card">
-      <h2>{info.originalName}</h2>
-      <p>{(info.size / 1024).toFixed(2)} KB</p>
-      <p>Remaining downloads: {info.remainingDownloads}</p>
+    <div className="page">
+      <div className="card">
+        <h2>{meta.originalName}</h2>
+        <p>Remaining downloads: {meta.remaining}</p>
 
-      {info.passwordProtected && (
-        <input
-          type="password"
-          placeholder="Enter password"
-          onChange={e => setPassword(e.target.value)}
-        />
-      )}
+        {meta.passwordRequired && (
+          <input
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+        )}
 
-      <button onClick={download}>Download</button>
+        <button onClick={download}>Download</button>
+
+        {error && <p>{error}</p>}
+      </div>
     </div>
   );
 }
