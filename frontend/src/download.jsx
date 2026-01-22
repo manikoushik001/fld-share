@@ -1,59 +1,51 @@
 import { useParams } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { API_BASE } from "./config";
 
 export default function Download() {
-  const { filename } = useParams();
+  const { id } = useParams();
   const [meta, setMeta] = useState(null);
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
 
   useEffect(() => {
-    fetch(`${API_BASE}/meta/${filename}`)
-      .then((r) => r.json())
-      .then(setMeta)
-      .catch(() => setError("Invalid link"));
-  }, [filename]);
+    fetch(`${API_BASE}/meta/${id}`)
+      .then(r => r.json())
+      .then(setMeta);
+  }, [id]);
 
-  const download = async () => {
-    const res = await fetch(`${API_BASE}/download/${filename}`, {
+  async function download() {
+    const res = await fetch(`${API_BASE}/download/${id}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password }),
+      body: JSON.stringify({ password })
     });
 
     if (!res.ok) {
-      setError(await res.text());
+      alert(await res.text());
       return;
     }
 
     const blob = await res.blob();
-    const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url;
-    a.download = meta.originalName;
+    a.href = URL.createObjectURL(blob);
+    a.download = meta.name;
     a.click();
-  };
+  }
 
-  if (!meta) return <p>Loading...</p>;
+  if (!meta) return <p>Loading…</p>;
 
   return (
-    <div className="page">
-      <div className="card">
-        <h2>{meta.originalName}</h2>
-        <p>Remaining: {meta.remaining}</p>
+    <div className="card">
+      <h2>{meta.name}</h2>
+      <p>Remaining downloads: {meta.remaining}</p>
 
-        {meta.passwordRequired && (
-          <input
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        )}
+      <input
+        placeholder="Password"
+        value={password}
+        onChange={e => setPassword(e.target.value)}
+      />
 
-        <button onClick={download}>Download</button>
-        {error && <p>{error}</p>}
-      </div>
+      <button onClick={download}>Download</button>
     </div>
   );
 }
