@@ -3,37 +3,57 @@ import { API_BASE } from "./config";
 
 export default function Upload() {
   const [file, setFile] = useState(null);
-  const [result, setResult] = useState(null);
+  const [status, setStatus] = useState("");
+  const [link, setLink] = useState("");
 
   const uploadFile = async () => {
-    if (!file) return alert("Select a file");
+    if (!file) {
+      setStatus("Select a file first");
+      return;
+    }
 
-    const form = new FormData();
-    form.append("file", file);
+    setStatus("Uploading...");
+    setLink("");
 
-    const res = await fetch(`${API_BASE}/upload`, {
-      method: "POST",
-      body: form
-    });
+    const formData = new FormData();
+    formData.append("file", file);
 
-    const data = await res.json();
-    setResult(data.downloadLink);
+    try {
+      const res = await fetch(`${API_BASE}/upload`, {
+        method: "POST",
+        body: formData
+      });
+
+      if (!res.ok) throw new Error("Upload failed");
+
+      const data = await res.json();
+      setLink(data.downloadLink);
+      setStatus("Upload successful");
+    } catch (err) {
+      setStatus("Upload failed");
+    }
   };
 
   return (
-    <div className="card">
-      <h2>FLD Share</h2>
-      <input type="file" onChange={e => setFile(e.target.files[0])} />
-      <button onClick={uploadFile}>Upload</button>
+    <div className="page">
+      <div className="card">
+        <h2>FLD Share</h2>
+        <p>Fast. Simple. Private.</p>
 
-      {result && (
-        <>
-          <input value={result} readOnly />
-          <button onClick={() => navigator.clipboard.writeText(result)}>
-            Copy Link
-          </button>
-        </>
-      )}
+        <input type="file" onChange={e => setFile(e.target.files[0])} />
+        <button onClick={uploadFile}>Upload</button>
+
+        {status && <p>{status}</p>}
+
+        {link && (
+          <>
+            <input value={link} readOnly />
+            <button onClick={() => navigator.clipboard.writeText(link)}>
+              Copy Link
+            </button>
+          </>
+        )}
+      </div>
     </div>
   );
 }

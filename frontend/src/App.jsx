@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import Upload from "./Upload";
-import Download from "./Download";
+import Upload from "./upload";
+import Download from "./download";
 
 export default function App() {
   return (

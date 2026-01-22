@@ -1,1 +1,1 @@
-export const API_BASE = "https://fldshare-backend.onrender.com";
+export const API_BASE = import.meta.env.VITE_API_BASE;
